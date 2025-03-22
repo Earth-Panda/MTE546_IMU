@@ -1,6 +1,6 @@
 #include <SPI.h>
 #include "SparkFun_BMI270_Arduino_Library.h"
-
+#include "esp_timer.h"
 //Chip select pins
 #define CS_NAPE 32
 #define CS_SHOULDER 33
@@ -13,12 +13,9 @@ BMI270 imu_shoulder;
 BMI270 imu_elbow;
 BMI270 imu_wrist;
 
-
-
 // SPI parameters
 uint32_t clockFrequency = 100000;
 
-int8_t
 void setup()
 {
     // Start serial
@@ -28,17 +25,10 @@ void setup()
     // Initialize the SPI library
     SPI.begin();
 
-    // Check if sensor is connected and initialize
-    // Clock frequency is optional (defaults to 100kHz)
-    for
-    while(imu.beginSPI(chipSelectPin, clockFrequency) != BMI2_OK)
-    {
-        // Not connected, inform user
-        Serial.println("Error: BMI270 not connected, check wiring and CS pin!");
-
-        // Wait a bit to see if connection is established
-        delay(1000);
-    }
+    startSPI(imu_nape, CS_NAPE, clockFrequency);
+    startSPI(imu_shoulder, CS_SHOULDER, clockFrequency);
+    startSPI(imu_elbow, CS_ELBOW, clockFrequency);
+    startSPI(imu_wrist, CS_WRIST, clockFrequency);
 
     Serial.println("BMI270 connected!");
 }
@@ -47,34 +37,35 @@ void loop()
 {
     // Get measurements from the sensor. This must be called before accessing
     // the sensor data, otherwise it will never update
-    imu.getSensorData();
-
-    // Print acceleration data
-    Serial.print("Acceleration in g's");
-    Serial.print("\t");
-    Serial.print("X: ");
-    Serial.print(imu.data.accelX, 3);
-    Serial.print("\t");
-    Serial.print("Y: ");
-    Serial.print(imu.data.accelY, 3);
-    Serial.print("\t");
-    Serial.print("Z: ");
-    Serial.print(imu.data.accelZ, 3);
-
-    Serial.print("\t");
-
-    // Print rotation data
-    Serial.print("Rotation in deg/sec");
-    Serial.print("\t");
-    Serial.print("X: ");
-    Serial.print(imu.data.gyroX, 3);
-    Serial.print("\t");
-    Serial.print("Y: ");
-    Serial.print(imu.data.gyroY, 3);
-    Serial.print("\t");
-    Serial.print("Z: ");
-    Serial.println(imu.data.gyroZ, 3);
+    uint64_t nape_time = esp_timer_get_time();
+    imu_nape.getSensorData();
+    
+    uint64_t shoulder_time = esp_timer_get_time();
+    imu_shoulder.getSensorData();
+    
+    uint64_t elbow_time = esp_timer_get_time();
+    imu_elbow.getSensorData();
+    
+    uint64_t wrist_time = esp_timer_get_time();
+    imu_wrist.getSensorData();
+    
+    transmitData(imu_nape, nape_time);
+    transmitData(imu_shoulder, shoulder_time);
+    transmitData(imu_elbow, elbow_time);
+    transmitData(imu_wrist, wrist_time);
 
     // Print 50x per second
     delay(20);
 }
+
+void startSPI(BMI270 imu, uint8_t cs_pin, uint32_t freq){
+  while(imu.beginSPI(cs_pin, freq) != BMI2_OK)
+    {
+        // Wait a bit to see if connection is established
+        delay(1000);
+    }
+}
+
+void transmitData(BMI270 imu, uint64_t time){
+  Serial.printf("%d, %f, %f, %f, %f, %f, %f", time, imu.data.accelX, imu.data.accelY, imu.data.accelZ, imu.data.gyroX, imu.data.gyroY, imu.data.gyroZ);
+} 
